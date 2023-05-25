@@ -1,6 +1,6 @@
 import sqlalchemy
-from sqlalchemy import Column, String, ForeignKey, Integer
-from sqlalchemy.orm import declarative_base, sessionmaker, relationship
+from sqlalchemy import Column, ForeignKey, String
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 from .config import settings
 

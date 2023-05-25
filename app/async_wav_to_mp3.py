@@ -1,7 +1,7 @@
+import asyncio
 import os
 
 import aiohttp
-import asyncio
 from dotenv import load_dotenv
 
 
@@ -22,6 +22,8 @@ async def convert_file(source_file: str, target_format: str, folder: str):
 
     # cписок для ошибок ошибок
     converting_errors = []
+
+    converting_file = ''
 
     async with aiohttp.ClientSession() as session:
         async with session.post(endpoint, data=data, auth=check_status_auth) as create_response:
@@ -59,7 +61,7 @@ async def convert_file(source_file: str, target_format: str, folder: str):
                                     converting_file = mp3_filename
                                 else:
                                     converting_errors.append({source_file: result})
-                                break
+                                    break
 
                             elif job_status == 'failed':
                                 converting_errors.append({source_file: 'Conversion failed'})
@@ -68,12 +70,11 @@ async def convert_file(source_file: str, target_format: str, folder: str):
                         else:
                             converting_errors.append(
                                 {source_file: f"Error checking job status: "
-                                              f"{check_status.status_code} {check_status.reason}"})
+                                              f"{check_status.status} {check_status.reason}"})
                             break
-
             else:
                 converting_errors.append(
-                    {source_file: f"Error creating job: {create_response.status_code} {create_response.reason}"})
+                    {source_file: f"Error creating job: {create_response.status} {create_response.reason}"})
 
     return converting_file, converting_errors
 
@@ -98,11 +99,11 @@ async def download_file(file_id, mp3_file, api_key):
 
 
 async def main():
-    source_file = "sample-3s.wav"
+    source_file = "sample-9s.wav"
     target_format = "mp3"
     folder_for_audio = '../audio/'
-    result = await convert_file(source_file, target_format, folder_for_audio)
-    print(result)
+    result, errors = await convert_file(source_file, target_format, folder_for_audio)
+    print(result, errors)
 
 
 if __name__ == "__main__":

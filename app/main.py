@@ -2,14 +2,13 @@ import os
 import uuid
 from typing import List
 
-from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, UploadFile, File, Depends
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from starlette.responses import FileResponse
 
 from .async_wav_to_mp3 import convert_file
 from .config import settings
-from .db import User, AudioRecord, SessionLocal
+from .db import AudioRecord, SessionLocal, User
 from .start_app import create_table
 
 app = FastAPI()
@@ -88,9 +87,13 @@ async def add_audio(audio_request: AudioCreateRequest = Depends(),
 
                     # Преобразуем WAV в MP3
                     converted_to_mp3, errors = await convert_file(wav_audio_file, "mp3", folder_for_audio)
-                    #converted_to_mp3, errors = 'sample-3s-79cf4831-22f9-4165-8e61-c49052c8a014.mp3', []
 
-                    failed_files.append(errors)
+                    # Сохраняем ошибку при обработке конкретного файла
+                    if errors:
+                        failed_files.append(
+                            {f'{audio_file.filename} fail in request to api zamzar.com': f'{errors}'})
+
+                    # если есть сконвериторованный файл
                     if converted_to_mp3:
 
                         # Сохраняем информацию об аудиозаписи в базе данных
@@ -101,7 +104,7 @@ async def add_audio(audio_request: AudioCreateRequest = Depends(),
                         except Exception as e:
                             raise HTTPException(status_code=500, detail=f'Invalid access to database {e}')
 
-                        download_url = f'http://{settings.host_url}/record?id={audio_id}&user={audio_request.user_id}, name = {converted_to_mp3}'
+                        download_url = f'http://{settings.host_url}/record?id={audio_id}&user={audio_request.user_id}'
                         successful_urls.append(download_url)
 
                     # Удаляем временный файл WAV
@@ -109,7 +112,7 @@ async def add_audio(audio_request: AudioCreateRequest = Depends(),
 
                 except Exception as e:
                     failed_files.append(
-                        {f'{audio_file.filename} try save .wav and convert to .mp3': f'{str(e)}'})
+                        {f'{audio_file.filename} try save and convert .wav to .mp3': f'{str(e)} {errors}'})
             else:
                 failed_files.append({audio_file.filename: "No .wav audiofile"})
 
