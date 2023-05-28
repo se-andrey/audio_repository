@@ -8,7 +8,7 @@
 	- запись в базу данных
 	- предоставление ссылки для скачивания аудиозаписи
 
-Для работы нажно зарегистрироваться на https://developers.zamzar.com/ и получить API ключ.
+Для работы нужно зарегистрироваться на https://developers.zamzar.com/ и получить API ключ.
 ## Установка
 ### Клонируем репозиторий
 
@@ -16,7 +16,7 @@
 
     cd cat app
 
-    git clone https://github.com/se-andrey/questions.git
+    git clone https://github.com/se-andrey/audio_repository.git
 
 ### Создаем .env
 
