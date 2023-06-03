@@ -1,17 +1,19 @@
 import os
 import re
 import uuid
-from typing import List, Optional
+from typing import List
 import logging
 
-from fastapi.exceptions import RequestValidationError
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, Header, Response, Request
-from pydantic import BaseModel, Field, validator, ValidationError
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, Header, Response
+from pydantic import BaseModel, Field, validator
 from starlette.responses import FileResponse, JSONResponse
 from sqlalchemy.exc import IntegrityError, DatabaseError
+from dotenv import load_dotenv
+
 from .async_wav_to_mp3 import convert_file
 from .config import settings
 from .db import AudioRecord, SessionLocal, User
+from .ffmpeg_convert import wav_to_mp3
 from .start_app import create_table
 
 # Получение пользовательского логгера и установка уровня логирования
@@ -30,6 +32,11 @@ main_logger.addHandler(main_handler)
 
 # Папка для хранения аудио файлов
 folder_for_audio = '../audio/'
+
+# Узнаем режим работы (самостоятельный или с помощью внешнего api)
+dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+load_dotenv(dotenv_path)
+FFMPEG = os.getenv('FFMPEG')
 
 app = FastAPI()
 
@@ -181,8 +188,18 @@ async def add_audio(audio_request: AudioCreateRequest = Depends(get_audio_create
                     main_logger.exception(f'Error save {wav_file_path}, delete temp wav file')
                     raise HTTPException(status_code=500, detail=str(e))
 
-                # Преобразуем WAV в MP3
-                converted_to_mp3, errors = await convert_file(wav_audio_file, "mp3", folder_for_audio)
+                # Выбираем способ конвертации
+                if FFMPEG == 'yes':
+
+                    # Преобразование WAV в MP3 с помощью ffmpeg
+                    converted_to_mp3, errors = wav_to_mp3(wav_audio_file, folder_for_audio)
+                elif FFMPEG == 'no':
+
+                    # Преобразуем WAV в MP3 с помощью стороннего API
+                    converted_to_mp3, errors = await convert_file(wav_audio_file, "mp3", folder_for_audio)
+                else:
+                    raise HTTPException(status_code=404,
+                                        detail='Need to choose the conversion mode: ffmpeg or external api')
 
                 # Сохраняем ошибку при обработке конкретного файла
                 if errors:
@@ -207,7 +224,9 @@ async def add_audio(audio_request: AudioCreateRequest = Depends(get_audio_create
 
                     download_url = f'http://{settings.host_url}/record?id={audio_id}&user={audio_request.user_id}'
                     successful_urls.append(download_url)
-                    main_logger.info(f'Add http://{settings.host_url}/record?id={audio_id}&user={audio_request.user_id}')
+                    main_logger.info(
+                        f'Add http://{settings.host_url}/record?id={audio_id}&user={audio_request.user_id}'
+                    )
 
                 # Удаляем временный файл WAV
                 os.remove(wav_file_path)

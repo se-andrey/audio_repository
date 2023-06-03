@@ -5,7 +5,6 @@ import os
 import aiohttp
 from dotenv import load_dotenv
 
-
 # Получение пользовательского логгера и установка уровня логирования
 wav_to_mp3_logger = logging.getLogger(__name__)
 wav_to_mp3_logger.setLevel(logging.INFO)
@@ -20,7 +19,8 @@ wav_to_mp3_handler.setFormatter(wav_to_mp3_formatter)
 # добавление обработчика к логгеру
 wav_to_mp3_logger.addHandler(wav_to_mp3_handler)
 
-async def convert_file(source_file: str, target_format: str, folder: str):
+
+async def convert_file(source_file: str, target_format: str, folder: str, converting_errors=None):
     # Получаем API_KEY
     dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
     load_dotenv(dotenv_path)
@@ -31,13 +31,16 @@ async def convert_file(source_file: str, target_format: str, folder: str):
     data = aiohttp.FormData()
     data.add_field('target_format', target_format)
 
-    mp3_file_path = os.path.join(folder, source_file)
-    data.add_field('source_file', open(mp3_file_path, 'rb'))
+    wav_file_path = os.path.join(folder, source_file)
+    data.add_field('source_file', open(wav_file_path, 'rb'))
     check_status_auth = aiohttp.BasicAuth(login=api_key, password='')
-    wav_to_mp3_logger.info(f'Status: {check_status_auth} for file:{mp3_file_path}')
+    wav_to_mp3_logger.info(f'Status: {check_status_auth} for file:{wav_file_path}')
 
-    # cписок для ошибок ошибок
-    converting_errors = []
+    # cписок для ошибок
+    if converting_errors is None:
+        converting_errors = []
+    else:
+        converting_errors[:] = []
 
     converting_file = ''
 
@@ -133,9 +136,8 @@ async def main():
     source_file = "sample-3s.wav"
     target_format = "mp3"
     folder_for_audio = '../audio/'
-    current_directory = os.getcwd()
     result, errors = await convert_file(source_file, target_format, folder_for_audio)
-
+    print(result, errors, sep='\n')
 
 
 if __name__ == "__main__":

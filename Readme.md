@@ -8,7 +8,12 @@
 	- запись в базу данных
 	- предоставление ссылки для скачивания аудиозаписи
 
-Для работы нужно зарегистрироваться на https://developers.zamzar.com/ и получить API ключ.
+Приложение реализует преобразование как самостоятельно, так и при помощи стороннего сервиса. По-умолчанию настроено самостоятельное преобразование.
+
+### Необязательно! Работает без этого, сделано для примера!
+
+Для работы со стронним сервисом нужно зарегистрироваться на https://developers.zamzar.com/ и получить API ключ.
+
 ## Установка
 ### Клонируем репозиторий
 
@@ -18,17 +23,22 @@
 
     git clone https://github.com/se-andrey/audio_repository.git
 
-### Создаем .env
+### Создаем .env 
 
     nano .env
 
 
-API_KEY=
+1) Если нужна самостоятельная конвертация файлов:
 
+		FFMPEG=yes
+2) Для конвертации внешим api:
+
+        API_KEY= 
+        FFMPEG=no
 
 ### Запуск
 
-Если на сервере нет docker/docker-compose, то установите его - инстукция https://docs.docker.com/
+Если на сервере нет docker/docker-compose, то установите его - инструкция https://docs.docker.com/
     
 	docker-compose up --build 
 
@@ -42,12 +52,18 @@ docker-compose работает на host 0.0.0.0 и порт 8000, можете
 
 Создаем пользователя
 
-![create_user](./images/create_user.jpg)
+![user](./images/user.jpg)
 
-Отправляем 2 файла .wav 
+Результаты обработки файлов:
+1) Самостоятельная обработка
+   
+Отправляем 5 файлов: 2 .wav + 2 другого формата + 1 .jpg, переименнованный в .wav  
+![request](./images/request.jpg)
 
-![create_request](./images/create_request.jpg)
+2) Обработка сторонним API
+Отправляем 5 файлов: 1 .wav + 1 другого формата + 4 файла, переименнованных в .wav  
+![request_api](./images/request_api.jpg)
 
 Скачиваем файл по полученной ссылке
 
-![download](./images/download.jpg)
+![download_file](./images/download_file.jpg)
