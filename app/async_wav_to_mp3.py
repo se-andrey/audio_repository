@@ -1,9 +1,24 @@
 import asyncio
+import logging
 import os
 
 import aiohttp
 from dotenv import load_dotenv
 
+
+# Получение пользовательского логгера и установка уровня логирования
+wav_to_mp3_logger = logging.getLogger(__name__)
+wav_to_mp3_logger.setLevel(logging.INFO)
+
+# Настройка обработчика и форматировщика
+wav_to_mp3_handler = logging.FileHandler(f"{__name__}.log", mode='w')
+wav_to_mp3_formatter = logging.Formatter("%(name)s %(asctime)s %(levelname)s %(message)s")
+
+# добавление форматировщика к обработчику
+wav_to_mp3_handler.setFormatter(wav_to_mp3_formatter)
+
+# добавление обработчика к логгеру
+wav_to_mp3_logger.addHandler(wav_to_mp3_handler)
 
 async def convert_file(source_file: str, target_format: str, folder: str):
     # Получаем API_KEY
@@ -19,6 +34,7 @@ async def convert_file(source_file: str, target_format: str, folder: str):
     mp3_file_path = os.path.join(folder, source_file)
     data.add_field('source_file', open(mp3_file_path, 'rb'))
     check_status_auth = aiohttp.BasicAuth(login=api_key, password='')
+    wav_to_mp3_logger.info(f'Status: {check_status_auth} for file:{mp3_file_path}')
 
     # cписок для ошибок ошибок
     converting_errors = []
@@ -33,9 +49,12 @@ async def convert_file(source_file: str, target_format: str, folder: str):
 
                 # Получем id задачи
                 job_id = (await create_response.json())['id']
+                wav_to_mp3_logger.info(f'Task to convert created, id:{job_id}')
 
                 # Эндпоинт задачи
                 check_status_url = f'https://sandbox.zamzar.com/v1/jobs/{job_id}'
+
+                wav_to_mp3_logger.info('Starting waiting for completed task')
 
                 # Ожидаем окончания обработки файла
                 while True:
@@ -55,24 +74,34 @@ async def convert_file(source_file: str, target_format: str, folder: str):
                                 mp3_filename = source_file.replace('.wav', '.mp3')
                                 mp3_file_path = os.path.join(folder, mp3_filename)
 
+                                wav_to_mp3_logger.info(f'Task complete, file_id:{file_id}')
+
                                 # Пытаемся скачать файл
                                 result = await download_file(file_id, mp3_file_path, api_key)
+
                                 if result == 'OK':
                                     converting_file = mp3_filename
+                                    wav_to_mp3_logger.info(f'File: {converting_file} is downloaded')
                                 else:
                                     converting_errors.append({source_file: result})
-                                    break
+                                    wav_to_mp3_logger.error(f'Error convert file: {source_file}, result: {result}')
+                                break
 
                             elif job_status == 'failed':
+                                wav_to_mp3_logger.error(f'{source_file}: Conversion failed')
                                 converting_errors.append({source_file: 'Conversion failed'})
                                 break
 
                         else:
+                            wav_to_mp3_logger.error(f'{source_file}: Error checking job status:'
+                                                    f'{check_status.status} {check_status.reason}')
                             converting_errors.append(
                                 {source_file: f"Error checking job status: "
                                               f"{check_status.status} {check_status.reason}"})
                             break
             else:
+                wav_to_mp3_logger.error(f'{source_file}: Error creating job:'
+                                        f'{create_response.status} {create_response.reason}')
                 converting_errors.append(
                     {source_file: f"Error creating job: {create_response.status} {create_response.reason}"})
 
@@ -82,6 +111,7 @@ async def convert_file(source_file: str, target_format: str, folder: str):
 async def download_file(file_id, mp3_file, api_key):
     # Эндпоинт для скачивания
     endpoint = f"https://sandbox.zamzar.com/v1/files/{file_id}/content"
+    wav_to_mp3_logger.info('Start downloading file')
 
     async with aiohttp.ClientSession() as session:
         async with session.get(endpoint, auth=aiohttp.BasicAuth(login=api_key, password='')) as response:
@@ -91,21 +121,23 @@ async def download_file(file_id, mp3_file, api_key):
                         if chunk:
                             f.write(chunk)
                             f.flush()
-
+                wav_to_mp3_logger.info('Download complete')
                 return "OK"
 
             except IOError as e:
+                wav_to_mp3_logger.exception(f'{str(e)}')
                 return str(e)
 
 
 async def main():
-    source_file = "sample-9s.wav"
+    source_file = "sample-3s.wav"
     target_format = "mp3"
     folder_for_audio = '../audio/'
+    current_directory = os.getcwd()
     result, errors = await convert_file(source_file, target_format, folder_for_audio)
-    print(result, errors)
+
 
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    loop = asyncio.new_event_loop()
+    asyncio.run(main())
