@@ -1,7 +1,8 @@
+import json
 import os
 import re
 import uuid
-from typing import List
+from typing import List, Optional
 import logging
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, Header, Response
@@ -38,6 +39,9 @@ dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
 load_dotenv(dotenv_path)
 FFMPEG = os.getenv('FFMPEG')
 
+# Максимальное число принимаемых файлов
+MAX_FILES = int(os.getenv('MAX_FILES'))
+
 app = FastAPI()
 
 
@@ -47,9 +51,10 @@ class UserCreateRequest(BaseModel):
 
     @validator('name')
     def validate_name(cls, name):
-        if not name.isalpha():
+        pattern = r'^[a-zA-Zа-яА-Я0-9_-]+$'
+        if not re.search(pattern, name):
             main_logger.exception(f'Incorrect name: {name}')
-            raise ValueError('Name can contain only alpha, not numbers')
+            raise ValueError('Name can contain only letters, numbers, "_" and "-"')
         return name
 
 
@@ -57,15 +62,6 @@ class UserCreateRequest(BaseModel):
 class AudioCreateRequest(BaseModel):
     user_id: int = Field(..., description='User ID')
     token: str = Field(..., description='Access token')
-
-    @validator('token')
-    def validator_token(cls, token):
-        pattern = r'^[0-9a-f-]+$'
-        if re.match(pattern, token):
-            return token
-        else:
-            main_logger.exception('Request attempt with a token containing unacceptable characters')
-            raise ValueError('Token containing unacceptable characters')
 
 
 # Получаем id и токен из заголовка
@@ -76,23 +72,22 @@ async def get_audio_create_request(
 ):
     return AudioCreateRequest(user_id=user_id, token=token)
 
+
 # Валидация аудиофайла
 def validate_audiofile(file):
-    # Ожидаемый формат имени (буквы, цифры, знаки подчеркивания, точки и дефисы)
-    pattern = r'^[\w.-]+$'
-    if re.match(pattern, file) and file.endswith('.wav'):
+    pattern = r'^[a-zA-Zа-яА-Я0-9_-]+\.wav+$'
+    if re.match(pattern, file):
         return True
     return False
 
 
-# Ошибки HTTPException
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request, exc):
-    main_logger.error(f'HTTPException: {exc.detail}')
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={'detail': exc.detail},
-    )
+def validator_token(token):
+    pattern = r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    if re.match(pattern, token):
+        return True
+    else:
+        main_logger.exception('Request attempt with a token containing unacceptable characters')
+        raise HTTPException(status_code=401, detail='Token containing unacceptable characters')
 
 
 # Добавляем пользователя, принимаем имя, возвращаем id + token
@@ -119,6 +114,13 @@ async def create_user(user_request: UserCreateRequest):
             user_id = user.id
             main_logger.info(f'Save user: {user_id}')
 
+            # Добавляем токен и имя пользователя в headers
+            response = Response()
+            response.headers['X-Token'] = token
+            response.headers['X-User-ID'] = str(user_id)
+
+            return response
+
     except IntegrityError:
         main_logger.exception(f'Try add already exists user: {user_request.name}')
         raise HTTPException(status_code=409, detail=f'User: {user_request.name} already exists')
@@ -127,26 +129,19 @@ async def create_user(user_request: UserCreateRequest):
         main_logger.exception(f'Invalid access to database {e}', exc_info=True)
         raise HTTPException(status_code=500, detail=f'Invalid access to database {str(e)}')
 
-    # Добавляем токен и имя пользователя в headers
-    response = Response()
-    response.headers['X-Token'] = token
-    response.headers['X-User-ID'] = str(user_id)
 
-    return response
-
-
+# Обработка аудио файлов
 @app.post('/audio')
 async def add_audio(audio_request: AudioCreateRequest = Depends(get_audio_create_request),
                     audio_files: List[UploadFile] = File(description="Audio files")):
-    # Проверка на наличие файлов
-    if audio_files is None:
-        main_logger.exception('No audio file to convert')
-        raise HTTPException(status_code=400, detail='No audio file to convert')
 
     # Ограничение числа отправляемых файлов
-    if len(audio_files) > 5:
+    if len(audio_files) > MAX_FILES:
         main_logger.exception(f'Two many files to upload: {len(audio_files)}')
         raise HTTPException(status_code=400, detail='Too many audio files. Maximum allowed is 5.')
+
+    # Валидация токена
+    validator_token(audio_request.token)
 
     with SessionLocal() as session:
 
@@ -164,7 +159,7 @@ async def add_audio(audio_request: AudioCreateRequest = Depends(get_audio_create
         # Проверка наличия папки "audio"
         if not os.path.exists(folder_for_audio):
             os.makedirs(folder_for_audio)
-            main_logger.info(f'Create folder for audio files')
+            main_logger.info('Create folder for audio files')
 
         for audio_file in audio_files:
 
@@ -203,8 +198,7 @@ async def add_audio(audio_request: AudioCreateRequest = Depends(get_audio_create
 
                 # Сохраняем ошибку при обработке конкретного файла
                 if errors:
-                    failed_files.append(
-                    {f'{audio_file.filename} fail in request to api zamzar.com': f'{errors}'})
+                    failed_files.append({f'{audio_file.filename} fail in request to api zamzar.com': f'{errors}'})
                     main_logger.error(f'{audio_file.filename} fail in request to api zamzar.com: {errors}')
 
                 # если есть сконвериторованный файл
@@ -241,6 +235,15 @@ async def add_audio(audio_request: AudioCreateRequest = Depends(get_audio_create
 
 @app.get('/record')
 async def get_audio_record(id: str, user: str):
+
+    # Валидация id файла
+    validator_token(id)
+
+    # Валидация user
+    if not user.isalnum():
+        main_logger.exception('Wrong user id with try to download mp3')
+        raise HTTPException(status_code=404, detail='Audio recording not found')
+
     with SessionLocal() as session:
 
         user = session.query(User).filter_by(id=user).first()

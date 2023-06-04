@@ -51,4 +51,3 @@ if __name__ == "__main__":
     folder_for_audio = 'D:/projects/users_audio/audio/'
     converted_to_mp3, errors = wav_to_mp3(wav_audio_file, folder_for_audio)
     print(converted_to_mp3, errors, sep='\n')
-

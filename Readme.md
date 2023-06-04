@@ -31,11 +31,14 @@
 1) Если нужна самостоятельная конвертация файлов:
 
 		FFMPEG=yes
+		MAX_FILES=5
 2) Для конвертации внешим api:
 
         API_KEY= 
-        FFMPEG=no
+        FFMPEG=no 
+        MAX_FILES=5
 
+MAX_FILES - максимальное число одновременно принимаемых файлов
 ### Запуск
 
 Если на сервере нет docker/docker-compose, то установите его - инструкция https://docs.docker.com/
