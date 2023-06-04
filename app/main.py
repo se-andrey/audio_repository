@@ -1,15 +1,15 @@
-import json
+import logging
 import os
 import re
 import uuid
-from typing import List, Optional
-import logging
+from typing import List
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, Header, Response
-from pydantic import BaseModel, Field, validator
-from starlette.responses import FileResponse, JSONResponse
-from sqlalchemy.exc import IntegrityError, DatabaseError
 from dotenv import load_dotenv
+from fastapi import (Depends, FastAPI, File, Header, HTTPException, Response,
+                     UploadFile)
+from pydantic import BaseModel, Field, validator
+from sqlalchemy.exc import DatabaseError, IntegrityError
+from starlette.responses import FileResponse
 
 from .async_wav_to_mp3 import convert_file
 from .config import settings
@@ -260,7 +260,7 @@ async def get_audio_record(id: str, user: str):
         audio_file_path = os.path.join(folder_for_audio, audio_recording.file_name)
 
         if not os.path.exists(audio_file_path):
-            main_logger.exception(f'Path not found')
+            main_logger.exception('Path not found')
             raise HTTPException(status_code=404,
                                 detail=f'Audio file not found {audio_file_path, audio_recording.file_name}')
 
